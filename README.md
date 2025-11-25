@@ -8,7 +8,7 @@ A modular open-source chess engine written in Python, inspired by the architectu
 - UCI protocol support
 - Modular structure for future optimization (C++ core possible)
 
-## Installation
+## Install
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install --user -r requirements.txt
