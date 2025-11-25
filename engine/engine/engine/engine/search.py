@@ -1,21 +1,18 @@
 import chess
 from .evaluation import evaluate
 from .transposition_table import TT
-from .move_ordering import order_moves, PIECE_VALUES
+from .move_ordering import order_moves, add_killer_move, add_history
 
 class Search:
     def __init__(self):
         self.tt = TT()
-        self.killer_moves = {}  # clé = profondeur, valeur = move
 
     def search(self, board: chess.Board, depth: int):
-        """
-        Renvoie le meilleur coup pour la position donnée et la profondeur.
-        """
+        """Renvoie le meilleur coup pour la position donnée et la profondeur."""
         best_score = -999999
         best_move = None
 
-        moves = order_moves(board, list(board.legal_moves))
+        moves = order_moves(board, list(board.legal_moves), depth)
         for move in moves:
             board.push(move)
             score = -self.negamax(board, depth - 1, -1000000, 1000000)
@@ -28,9 +25,7 @@ class Search:
         return best_move
 
     def negamax(self, board: chess.Board, depth: int, alpha: int, beta: int):
-        """
-        Negamax avec alpha-beta et table de transpositions
-        """
+        """Negamax avec alpha-beta, table de transpositions, extensions, killer moves, history heuristic."""
         if board.is_game_over():
             return self.game_over_score(board)
 
@@ -46,7 +41,7 @@ class Search:
             return self.quiescence(board, alpha, beta)
 
         best = -1000000
-        moves = order_moves(board, list(board.legal_moves))
+        moves = order_moves(board, list(board.legal_moves), depth)
         for move in moves:
             board.push(move)
             score = -self.negamax(board, depth - 1 + extend, -beta, -alpha)
@@ -54,24 +49,24 @@ class Search:
 
             if score > best:
                 best = score
-                # Killer move : si coup coupe l’alpha-beta, on le note
-                if best >= beta:
-                    self.killer_moves[depth] = move
 
-            if best > alpha:
-                alpha = best
-            if alpha >= beta:
-                break
+            # Killer moves et history heuristic
+            if score >= beta:
+                add_killer_move(move, depth)
+                add_history(move, depth)
+                self.tt.store(key, depth, best, alpha, beta)
+                return best
 
-        # Stockage dans la table de transposition avec flag
+            if score > alpha:
+                alpha = score
+                add_history(move, depth)
+
+        # Stockage dans la table de transposition avec flags
         self.tt.store(key, depth, best, alpha, beta)
-
         return best
 
     def quiescence(self, board: chess.Board, alpha: int, beta: int):
-        """
-        Recherche quiescence : seulement captures et promotions
-        """
+        """Recherche quiescence : captures et promotions"""
         stand_pat = evaluate(board)
 
         if stand_pat >= beta:
@@ -79,7 +74,8 @@ class Search:
         if alpha < stand_pat:
             alpha = stand_pat
 
-        moves = [m for m in board.legal_moves if board.is_capture(m) or board.piece_at(m.from_square).piece_type == chess.PAWN]
+        moves = [m for m in board.legal_moves
+                 if board.is_capture(m) or board.piece_at(m.from_square).piece_type == chess.PAWN]
         moves = order_moves(board, moves)
 
         for move in moves:
@@ -95,9 +91,7 @@ class Search:
         return alpha
 
     def game_over_score(self, board: chess.Board):
-        """
-        Retourne un score extrême selon le résultat de la partie
-        """
+        """Retourne un score extrême selon le résultat de la partie"""
         if board.is_checkmate():
             return -999999 if board.turn else 999999
         return 0
